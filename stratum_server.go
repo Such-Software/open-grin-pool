@@ -65,9 +65,15 @@ func (ms *minerSession) handleMethod(res *stratumResponse, db *database) {
 		if ok {
 			db.putShare(ms.login, ms.agent, ms.difficulty)
 			if strings.Contains(detail, "block") {
-				blockHash := strings.Trim(detail, "block - ")
+				blockHash := strings.TrimSpace(strings.TrimPrefix(detail, "block - "))
 				db.putBlockHash(blockHash)
 				log.Warning("block ", blockHash, " has been found by ", ms.login)
+				// Open the round here, while the share table still reflects the work that
+				// earned this block. Waiting until the reward matures a day later would
+				// credit whoever happens to be mining then, which is what upstream did.
+				if err := openRoundForBlock(db, blockHash, ms.login); err != nil {
+					log.Error("could not open round for block ", blockHash, ": ", err)
+				}
 			}
 		}
 		break

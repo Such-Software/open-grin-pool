@@ -28,6 +28,11 @@ import (
 // round cannot be credited before then either.
 const CoinbaseMaturity = 1440
 
+// BlockReward is grin's flat block reward in nanogrin: consensus.rs sets
+// REWARD = BLOCK_TIME_SEC * GRIN_BASE, sixty seconds times 10^9, and there is no halving.
+// A block's actual coinbase is this plus the fees of the transactions it carried.
+const BlockReward uint64 = 60 * 1_000_000_000
+
 // Round is one block we found and the shares that earned it.
 type Round struct {
 	Height uint64            // the block height we solved

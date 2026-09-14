@@ -14,6 +14,10 @@ import (
 type database struct {
 	client *redis.Client
 	conf   *config
+	// node resolves facts the stratum relay cannot supply. The pool passes the node's
+	// stratum through rather than building jobs, so a submission names a hash and nothing
+	// else; height and reward have to come from the chain.
+	node *nodeAPI
 }
 
 func initDB(config *config) *database {
@@ -28,7 +32,7 @@ func initDB(config *config) *database {
 		panic(err)
 	}
 
-	return &database{rdb, config}
+	return &database{client: rdb, conf: config, node: newNodeAPI(config)}
 }
 
 func (db *database) registerMiner(login, pass, payment string) {
