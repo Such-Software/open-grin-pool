@@ -1,19 +1,19 @@
 {
   "log": {
-    "level": "debug",
+    "level": "info",
     "file": ""
   },
   "stratum_server": {
     "address": "0.0.0.0",
     "port": 3344,
     "backup_interval": "6h",
-    "omit_agent_status": ["SRB"] 
+    "omit_agent_status": ["SRB"]
   },
   "api_server": {
-    "address": "0.0.0.0",
+    "address": "127.0.0.1",
     "port": 3333,
-    "auth_user": "grin",
-    "auth_pass": "xVbM1DS6MTPr3f5qwWCe"
+    "auth_user": "lepool",
+    "auth_pass": ""
   },
   "storage": {
     "address": "127.0.0.1",
@@ -23,22 +23,22 @@
   },
   "node": {
     "address": "127.0.0.1",
-    "api_port": 23413,
-    "stratum_port": 23416,
+    "api_port": 3413,
+    "stratum_port": 3416,
     "auth_user": "grin",
-    "auth_pass": "xVbM1DS6MTPr3f5qwWCe",
+    "auth_pass": "",
     "diff": 50000,
     "block_time": 60
   },
   "wallet": {
     "address": "127.0.0.1",
-    "owner_api_version": "v1",
-    "owner_api_port": 23415,
+    "owner_api_version": "v3",
+    "owner_api_port": 3420,
     "auth_user": "grin",
-    "auth_pass": "xVbM1DS6MTPr3f5qwWCe"
+    "auth_pass": ""
   },
   "payer": {
     "time": "23:59",
-    "fee": 0.01
+    "fee": 0.005
   }
 }

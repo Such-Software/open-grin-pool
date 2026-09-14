@@ -1,1 +1,7 @@
-*.log
+# Build output. The binary is produced by `go build`, never committed.
+/lepool
+/open-grin-pool
+
+# Operator-local config. The repository ships config.json with logical names and empty
+# secrets; a deployment keeps its own copy outside the tree.
+/config.local.json
