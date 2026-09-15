@@ -1,11 +1,5 @@
 package main
 
-import (
-	"strconv"
-	"strings"
-	"time"
-)
-
 type payer struct {
 	db    *database
 	conf  *config
@@ -20,64 +14,20 @@ type jsonRPCResponse struct {
 	Error   map[string]interface{} `json:"error"`
 }
 
-// distribute coins when balance is > 1e9 nano
-func (p *payer) distribute(newBalance uint64) {
-	// get a distribution table
-	revenue4Miners := uint64(float64(newBalance) * (1 - p.conf.Payer.Fee))
-	p.db.calcRevenueToday(revenue4Miners)
-}
-
-func (p *payer) watch() {
-	go func() {
-		m := strings.Split(p.conf.Payer.Time, ":")
-		hour, err := strconv.Atoi(m[0])
-		if err != nil {
-			log.Error(err)
-		}
-		min, err := strconv.Atoi(m[1])
-		if err != nil {
-			log.Error(err)
-		}
-
-		var getNewBalance func() uint64
-		switch p.conf.Wallet.OwnerAPIVersion {
-		case "v1":
-			getNewBalance = p.owner.getNewBalanceV1
-		case "v2":
-			getNewBalance = p.owner.getNewBalanceV2
-		case "v3":
-			getNewBalance = p.owner.getNewBalanceV3
-		}
-
-		for {
-			now := time.Now()
-			t := time.Date(now.Year(), now.Month(), now.Day(), hour, min, 0, 0, now.Location())
-			if t.After(now) == false {
-				next := now.Add(time.Hour * 24)
-				t = time.Date(next.Year(), next.Month(), next.Day(), hour, min, 0, 0, next.Location())
-			}
-			timer := time.NewTimer(t.Sub(now))
-
-			select {
-			case <-timer.C:
-				newBalance := getNewBalance()
-				if newBalance > 1e9 {
-					p.distribute(newBalance - 1e9)
-				} else {
-					p.distribute(0)
-				}
-			}
-		}
-	}()
-}
+// The balance-delta payer is gone.
+//
+// It read the wallet's spendable balance on a daily timer and split whatever it had grown
+// by across whoever held shares at that moment. Rounds replace that entirely: the unlocker
+// credits each miner against the specific block their shares earned, once the chain has
+// matured it and still holds our hash. Running both would credit every reward twice, once
+// per model.
+//
+// What remains for this file is the half rounds do not do: taking a credited balance and
+// actually sending it, over Tor to a listening wallet or as a slatepack to be claimed. That
+// is unwritten, so the payer starts nothing rather than pretending to pay.
 
 func initPayer(db *database, conf *config) *payer {
-	p := &payer{
-		db:    db,
-		conf:  conf,
-		owner: NewOwnerAPI(db, conf),
-	}
-	p.watch()
-
-	return p
+	log.Warning("payer: automatic payouts are not implemented; balances accrue and must be " +
+		"paid by hand. Rounds are credited by the unlocker as blocks mature.")
+	return &payer{db: db, conf: conf, owner: NewOwnerAPI(db, conf)}
 }
