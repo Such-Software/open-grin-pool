@@ -91,12 +91,12 @@ func TestAMissingRequiredSecretRefusesAndNamesTheVariable(t *testing.T) {
 	// A pool that starts with an empty RPC password authenticates against nothing and
 	// fails later as a confusing 401 from the node. Fail here, naming the variable.
 	setSecrets(t)
-	t.Setenv(envWalletAuthPass, "")
+	t.Setenv(envNodeAuthPass, "")
 	_, err := loadConfig(writeConfig(t, secretlessConfig))
 	if err == nil {
-		t.Fatal("a missing wallet secret was accepted")
+		t.Fatal("a missing node secret was accepted")
 	}
-	if !strings.Contains(err.Error(), envWalletAuthPass) {
+	if !strings.Contains(err.Error(), envNodeAuthPass) {
 		t.Errorf("refusal does not name the missing variable, got: %v", err)
 	}
 }
@@ -140,5 +140,17 @@ func TestAPoolWithNoPayoutFloorIsRefused(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "threshold_grin") {
 			t.Errorf("%s was accepted, got %v", bad, err)
 		}
+	}
+}
+
+
+func TestTheWalletSecretIsOptionalBecauseNothingReadsIt(t *testing.T) {
+	// The payout transports drive the grin-wallet CLI, which takes the passphrase on stdin.
+	// The owner API client that would have used this is dead code against endpoints 5.5.0
+	// no longer serves, so asking for it would teach people to invent a value.
+	setSecrets(t)
+	os.Unsetenv(envWalletAuthPass)
+	if _, err := loadConfig(writeConfig(t, secretlessConfig)); err != nil {
+		t.Fatalf("an unset wallet secret was refused: %v", err)
 	}
 }

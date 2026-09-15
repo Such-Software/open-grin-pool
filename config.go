@@ -135,7 +135,12 @@ func loadConfig(path string) (*config, error) {
 		required bool
 	}{
 		{envNodeAuthPass, &conf.Node.AuthPass, true},
-		{envWalletAuthPass, &conf.Wallet.AuthPass, true},
+		// Optional: nothing reads it. The payout transports drive the grin-wallet CLI,
+		// which authenticates with the wallet passphrase on stdin, and the owner API
+		// client that would have used this is dead code against endpoints 5.5.0 no
+		// longer serves. Demanding a secret that does nothing teaches people to invent
+		// values, which is worse than not asking.
+		{envWalletAuthPass, &conf.Wallet.AuthPass, false},
 		{envAPIAuthPass, &conf.APIServer.AuthPass, true},
 		{envStoragePass, &conf.Storage.Password, false},
 	} {
