@@ -2,6 +2,7 @@ package main
 
 import (
 	"testing"
+	"time"
 )
 
 // The ledger invariant, stated once: at every moment a miner's money is in exactly one of
@@ -95,5 +96,59 @@ func TestEveryStateIsEitherResolvedOrNeedsSomething(t *testing.T) {
 		if !resolves(s) && !needsAttention(s) {
 			t.Errorf("state %q is neither resolved nor flagged; it would be invisible", s)
 		}
+	}
+}
+
+func TestAnExpiredSlatepackReturnsTheMoneyAndResolves(t *testing.T) {
+	// Cancelling at the wallet unlocks the outputs, so the miner is owed again and the
+	// payout is finished with. They keep the money; they just get paid again next run.
+	if !returnsToBalance(PayoutExpired) {
+		t.Error("an expired slatepack did not return the amount to the balance")
+	}
+	if !resolves(PayoutExpired) {
+		t.Error("an expired slatepack stayed open after its money went back")
+	}
+}
+
+func TestOnlyAnUnclaimedSlatepackCanExpire(t *testing.T) {
+	// Expiring a sent payout would credit a miner who was already paid. Expiring a reserved
+	// one would guess at an outcome nobody knows.
+	long := time.Now().Add(-365 * 24 * time.Hour).Unix()
+	for _, s := range []PayoutState{PayoutSent, PayoutFailed, PayoutReserved, PayoutExpired} {
+		if Expired(&PayoutRecord{State: s, At: long}, time.Now()) {
+			t.Errorf("state %q was treated as expirable", s)
+		}
+	}
+	if !Expired(&PayoutRecord{State: PayoutAwaitingClaim, At: long}, time.Now()) {
+		t.Error("a year-old unclaimed slatepack did not expire")
+	}
+}
+
+func TestTheTTLBoundaryIsExact(t *testing.T) {
+	now := time.Now()
+	at := now.Add(-SlatepackTTL).Unix()
+	if !Expired(&PayoutRecord{State: PayoutAwaitingClaim, At: at}, now) {
+		t.Error("a payout exactly at the TTL did not expire")
+	}
+	just := now.Add(-SlatepackTTL).Add(2 * time.Second).Unix()
+	if Expired(&PayoutRecord{State: PayoutAwaitingClaim, At: just}, now) {
+		t.Error("a payout just inside the TTL expired early")
+	}
+	if SlatepackTTL != 30*24*time.Hour {
+		t.Errorf("SlatepackTTL is %v, want 30 days", SlatepackTTL)
+	}
+}
+
+func TestASlateIDIsFoundInWalletOutput(t *testing.T) {
+	// Without the transaction id a slatepack payout can never be cancelled, so the outputs
+	// behind it stay locked forever.
+	out := `Command 'send' completed successfully
+	Slatepack data follows...
+	tx id: 0436430c-2b02-624c-2032-570501212b00 sent`
+	if got := SlateIDFrom(out); got != "0436430c-2b02-624c-2032-570501212b00" {
+		t.Errorf("SlateIDFrom = %q", got)
+	}
+	if SlateIDFrom("no uuid here at all") != "" {
+		t.Error("found a transaction id in output that carries none")
 	}
 }

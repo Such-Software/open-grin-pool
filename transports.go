@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -47,6 +48,7 @@ const nanogrinPerGrin uint64 = 1_000_000_000
 
 var (
 	ErrNoDestination = errors.New("payout has no destination address")
+	ErrNoTxID        = errors.New("payout has no wallet transaction to cancel")
 	ErrZeroAmount    = errors.New("payout amount is zero")
 	ErrSendFailed    = errors.New("wallet refused the send")
 )
@@ -132,4 +134,52 @@ func (s *Sender) Send(ctx context.Context, t Transport, dest string, nano uint64
 		return text, fmt.Errorf("%w: %v", ErrSendFailed, runErr)
 	}
 	return text, nil
+}
+
+
+// slateIDPattern finds the wallet's transaction UUID in send output. Cancelling needs it,
+// and a slatepack payout that cannot be cancelled is one the pool can never reclaim.
+var slateIDPattern = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
+
+// SlateIDFrom pulls the transaction UUID out of grin-wallet's send output, or "" if the
+// output does not carry one.
+func SlateIDFrom(out string) string {
+	return slateIDPattern.FindString(out)
+}
+
+// Cancel unlocks the outputs behind an unconfirmed transaction, so the amount can be
+// credited back and spent again.
+//
+// This is what makes a slatepack payout reclaimable. Without it an unclaimed blob commits
+// the pool's funds forever: the outputs stay locked, the miner never finalises, and nobody
+// can spend them.
+//
+// Order matters at the call site. Cancel first, then credit the miner back. Cancelling
+// invalidates the slate the miner holds, so after it succeeds they cannot complete it; the
+// reverse order would leave a window where a miner could both claim the slatepack and hold
+// the returned balance.
+func (s *Sender) Cancel(ctx context.Context, txID string) (string, error) {
+	if strings.TrimSpace(txID) == "" {
+		return "", ErrNoTxID
+	}
+	pass, err := os.ReadFile(s.PassFile)
+	if err != nil {
+		return "", fmt.Errorf("read passphrase file %s: %w", s.PassFile, err)
+	}
+
+	timeout := s.Timeout
+	if timeout == 0 {
+		timeout = 2 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, s.Bin, "-t", s.WalletDir, "cancel", "-t", txID)
+	cmd.Stdin = bytes.NewReader(pass)
+	var out bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &out
+	if err := cmd.Run(); err != nil {
+		return out.String(), fmt.Errorf("cancel %s: %w", txID, err)
+	}
+	return out.String(), nil
 }

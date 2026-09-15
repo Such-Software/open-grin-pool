@@ -52,6 +52,9 @@ const (
 	PayoutAwaitingClaim PayoutState = "awaiting-claim"
 	// PayoutFailed means nothing was sent and the amount went back to the balance.
 	PayoutFailed PayoutState = "failed"
+	// PayoutExpired means an unclaimed slatepack was cancelled at the wallet and the amount
+	// returned to the miner's balance. They keep the money; they just have to be paid again.
+	PayoutExpired PayoutState = "expired"
 )
 
 // PayoutRecord is one attempt to pay one miner.
@@ -62,6 +65,7 @@ type PayoutRecord struct {
 	Transport Transport   `json:"transport"`
 	State     PayoutState `json:"state"`
 	Slatepack string      `json:"slatepack,omitempty"`
+	TxID      string      `json:"txid,omitempty"`
 	Detail    string      `json:"detail,omitempty"`
 	At        int64       `json:"at"`
 }
@@ -148,7 +152,7 @@ func (p *Payer) settle(rec *PayoutRecord, state PayoutState, detail string) erro
 	pipe := p.db.client.TxPipeline()
 	pipe.Set(payoutKey+rec.ID, blob, 0)
 	pipe.ZAdd(payoutIndex, redis.Z{Score: float64(rec.At), Member: rec.ID})
-	if state == PayoutFailed {
+	if returnsToBalance(state) {
 		pipe.HIncrBy(balanceKey, rec.Miner, int64(rec.Amount))
 		pipe.SRem(payoutPending, rec.ID)
 	}
@@ -194,6 +198,9 @@ func (p *Payer) Run(ctx context.Context) {
 			}
 		case t == TransportSlatepack:
 			rec.Slatepack = outfile
+			// Without the wallet's transaction id the payout can never be cancelled, so the
+			// outputs behind it would stay locked forever. Record it or refuse the payout.
+			rec.TxID = SlateIDFrom(out)
 			if err := p.settle(rec, PayoutAwaitingClaim, "slatepack written"); err != nil {
 				log.Error("payer: ", err)
 			}
@@ -220,11 +227,13 @@ func trimForLog(s string) string {
 
 // returnsToBalance reports whether reaching this state puts the amount back in the miner's
 // balance. Only failure does: nothing was sent, so the miner is still owed it.
-func returnsToBalance(s PayoutState) bool { return s == PayoutFailed }
+func returnsToBalance(s PayoutState) bool { return s == PayoutFailed || s == PayoutExpired }
 
 // resolves reports whether a payout in this state is finished with. An unclaimed slatepack
 // is not: the money is committed to it until the miner returns it or it is cancelled.
-func resolves(s PayoutState) bool { return s == PayoutSent || s == PayoutFailed }
+func resolves(s PayoutState) bool {
+	return s == PayoutSent || s == PayoutFailed || s == PayoutExpired
+}
 
 // needsAttention reports whether a state should be surfaced to an operator rather than
 // waited on. Reserved means we do not know whether the money left.
@@ -239,4 +248,71 @@ func transportFromStored(v string) Transport {
 		return TransportSlatepack
 	}
 	return TransportTor
+}
+
+
+// SlatepackTTL is how long an unclaimed slatepack is held before it is cancelled and the
+// amount returned to the miner's balance.
+//
+// Thirty days is a compromise between two real costs. Too short and a miner who was away
+// loses a payout they could have claimed. Too long and the outputs behind every unclaimed
+// blob stay locked, so the pool cannot spend them to pay anybody else, and a pool whose
+// funds are all committed to abandoned slatepacks cannot pay at all.
+const SlatepackTTL = 30 * 24 * time.Hour
+
+// Expired reports whether an awaiting-claim payout has outlived its TTL.
+func Expired(rec *PayoutRecord, now time.Time) bool {
+	if rec.State != PayoutAwaitingClaim {
+		return false
+	}
+	return now.Sub(time.Unix(rec.At, 0)) >= SlatepackTTL
+}
+
+// ExpireStale cancels unclaimed slatepacks past their TTL and returns the amounts.
+//
+// The order is load-bearing and is the reverse of what reads naturally. Cancel at the wallet
+// FIRST: that invalidates the slate the miner is holding, so once it succeeds they cannot
+// complete it. Only then credit them back. Crediting first would leave a window in which a
+// miner could finalise the slatepack they already have AND hold the returned balance, and
+// the pool pays twice.
+//
+// A cancel that fails leaves the record untouched and awaiting claim, so the next pass tries
+// again. That is the safe direction: the miner can still claim, and nothing was double-paid.
+func (p *Payer) ExpireStale(ctx context.Context) {
+	ids, err := p.db.client.SMembers(payoutPending).Result()
+	if err != nil {
+		log.Error("payer: cannot list open payouts: ", err)
+		return
+	}
+	now := p.now()
+	for _, id := range ids {
+		blob, err := p.db.client.Get(payoutKey + id).Result()
+		if err != nil {
+			continue
+		}
+		var rec PayoutRecord
+		if json.Unmarshal([]byte(blob), &rec) != nil || !Expired(&rec, now) {
+			continue
+		}
+		if rec.TxID == "" {
+			log.Error("payer: payout ", id, " is stale but carries no transaction id, so it "+
+				"cannot be cancelled; the outputs behind it stay locked until someone "+
+				"cancels it by hand")
+			continue
+		}
+		if out, err := p.send.Cancel(ctx, rec.TxID); err != nil {
+			log.Warning("payer: could not cancel stale payout ", id, ", will retry: ", err,
+				" ", trimForLog(out))
+			continue
+		}
+		if err := p.settle(&rec, PayoutExpired, "unclaimed past TTL, cancelled"); err != nil {
+			// Cancelled at the wallet but not credited back. The miner is owed and the
+			// ledger does not say so, which needs a person.
+			log.Error("payer: CANCELLED BUT NOT CREDITED for ", rec.Miner, " amount ",
+				strconv.FormatUint(rec.Amount, 10), " nanogrin: ", err)
+			continue
+		}
+		log.Warning("payer: expired unclaimed slatepack for ", rec.Miner, ", ",
+			FormatGrin(rec.Amount), " GRIN returned to balance")
+	}
 }
