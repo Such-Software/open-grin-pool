@@ -152,3 +152,17 @@ func TestASlateIDIsFoundInWalletOutput(t *testing.T) {
 		t.Error("found a transaction id in output that carries none")
 	}
 }
+
+func TestTheConfiguredThresholdIsTheOneThePageAdvertises(t *testing.T) {
+	// The pool page states a payout floor. If the daemon uses a different number the page
+	// is lying, so the floor comes from config rather than a constant in the code.
+	c := &config{}
+	c.Payer.ThresholdGrin = 10
+	if got := ThresholdFrom(c); got != 10_000_000_000 {
+		t.Errorf("10 GRIN floor = %d nanogrin, want 10000000000", got)
+	}
+	c.Payer.ThresholdGrin = 0.5
+	if got := ThresholdFrom(c); got != 500_000_000 {
+		t.Errorf("0.5 GRIN floor = %d nanogrin", got)
+	}
+}

@@ -7,7 +7,9 @@
     "address": "0.0.0.0",
     "port": 3344,
     "backup_interval": "6h",
-    "omit_agent_status": ["SRB"]
+    "omit_agent_status": [
+      "SRB"
+    ]
   },
   "api_server": {
     "address": "127.0.0.1",
@@ -39,6 +41,7 @@
   },
   "payer": {
     "time": "23:59",
-    "fee": 0.005
+    "fee": 0.005,
+    "threshold_grin": 10
   }
 }

@@ -83,6 +83,13 @@ func NewPayer(db *database, send *Sender, threshold uint64, outDir string) *Paye
 	return &Payer{db: db, send: send, threshold: threshold, outDir: outDir, now: time.Now}
 }
 
+// ThresholdFrom converts the configured payout floor to nanogrin. Rounding is deliberate:
+// a floor is a minimum, so a fractional nanogrin rounds up rather than letting a payout
+// slip under the published number.
+func ThresholdFrom(conf *config) uint64 {
+	return uint64(conf.Payer.ThresholdGrin*float64(nanogrinPerGrin) + 0.5)
+}
+
 // transportFor reads a miner's chosen transport. Tor is the default because it needs
 // nothing from the miner at payout time beyond being online, and it is what the pool page
 // tells people to expect.

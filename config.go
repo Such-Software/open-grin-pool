@@ -49,6 +49,10 @@ type config struct {
 	Payer struct {
 		Time string  `json:"time"`
 		Fee  float64 `json:"fee"`
+		// Below this a balance is held rather than sent. Grin fees are high enough that a
+		// small payout costs more than it delivers, and the published threshold on the pool
+		// page has to be this number or the page is lying.
+		ThresholdGrin float64 `json:"threshold_grin"`
 	} `json:"payer"`
 }
 
@@ -117,6 +121,12 @@ func loadConfig(path string) (*config, error) {
 				"%s carries a literal value in %s; credentials come from the environment, "+
 					"leave it empty and export the matching LEPOOL_* variable", got.where, path)
 		}
+	}
+
+	if conf.Payer.ThresholdGrin <= 0 {
+		return nil, fmt.Errorf(
+			"payer.threshold_grin must be set above zero in %s; a pool with no payout floor "+
+				"spends more in fees than it delivers", path)
 	}
 
 	for _, bind := range []struct {

@@ -17,7 +17,7 @@ const secretlessConfig = `{
            "auth_user": "grin", "auth_pass": "", "diff": 50000, "block_time": 60},
   "wallet": {"address": "127.0.0.1", "owner_api_version": "v3", "owner_api_port": 3420,
              "auth_user": "grin", "auth_pass": ""},
-  "payer": {"time": "23:59", "fee": 0.005}
+  "payer": {"time": "23:59", "fee": 0.005, "threshold_grin": 10}
 }`
 
 func writeConfig(t *testing.T, body string) string {
@@ -127,5 +127,18 @@ func TestTheShippedConfigCarriesNoSecrets(t *testing.T) {
 	setSecrets(t)
 	if _, err := loadConfig("config.json"); err != nil {
 		t.Fatalf("the repository's config.json is not loadable secretless: %v", err)
+	}
+}
+
+func TestAPoolWithNoPayoutFloorIsRefused(t *testing.T) {
+	// Grin fees are high enough that paying a small balance costs more than it delivers, so
+	// a missing or zero floor is a configuration mistake rather than a permissive default.
+	setSecrets(t)
+	for _, bad := range []string{`"threshold_grin": 0`, `"threshold_grin": -1`} {
+		body := strings.Replace(secretlessConfig, `"threshold_grin": 10`, bad, 1)
+		_, err := loadConfig(writeConfig(t, body))
+		if err == nil || !strings.Contains(err.Error(), "threshold_grin") {
+			t.Errorf("%s was accepted, got %v", bad, err)
+		}
 	}
 }
