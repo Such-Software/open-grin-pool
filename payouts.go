@@ -93,6 +93,12 @@ func ThresholdFrom(conf *config) uint64 {
 // transportFor reads a miner's chosen transport. Tor is the default because it needs
 // nothing from the miner at payout time beyond being online, and it is what the pool page
 // tells people to expect.
+//
+// A miner sets it through the stratum password field, which is otherwise unused: connecting
+// with pass "slatepack" records the preference. That keeps the promise of no signup and no
+// account, and it means the choice travels with the miner's own config rather than living
+// somewhere they cannot reach. Without it the stored field was unreachable and the slatepack
+// transport the page advertises could never actually be selected.
 func (p *Payer) transportFor(miner string) Transport {
 	v, err := p.db.client.HGet("user:"+miner, "transport").Result()
 	if err != nil {

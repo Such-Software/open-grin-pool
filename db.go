@@ -71,6 +71,16 @@ func (db *database) verifyMiner(login, pass string) minerLoginStatusCode {
 	return correctPassword
 }
 
+// setTransport records a miner's payout choice, taken from the stratum password field. An
+// unrecognised value is stored as tor rather than rejected: a miner who typed something odd
+// should still get paid, by the default the page documents.
+func (db *database) setTransport(login, pass string) {
+	t := transportFromStored(pass)
+	if _, err := db.client.HSet("user:"+login, "transport", string(t)).Result(); err != nil {
+		log.Error(err)
+	}
+}
+
 func (db *database) updatePayment(login, payment string) {
 	_, err := db.client.HMSet("user:"+login, map[string]interface{}{
 		"payment": payment,

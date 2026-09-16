@@ -166,3 +166,24 @@ func TestTheConfiguredThresholdIsTheOneThePageAdvertises(t *testing.T) {
 		t.Errorf("0.5 GRIN floor = %d nanogrin", got)
 	}
 }
+
+func TestAMinerCanActuallySelectSlatepack(t *testing.T) {
+	// The stratum password field is how a miner chooses, because there are no accounts and
+	// nothing else reaches them. Before this the stored preference was unreachable and the
+	// slatepack transport the page advertises could never be selected at all.
+	for _, c := range []struct {
+		pass string
+		want Transport
+	}{
+		{"slatepack", TransportSlatepack},
+		{" slatepack ", TransportSlatepack},
+		{"x", TransportTor},
+		{"", TransportTor},
+		{"tor", TransportTor},
+		{"whatever", TransportTor},
+	} {
+		if got := transportFromStored(c.pass); got != c.want {
+			t.Errorf("pass %q selected %q, want %q", c.pass, got, c.want)
+		}
+	}
+}

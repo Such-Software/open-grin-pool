@@ -174,6 +174,10 @@ func (ss *stratumServer) handleConn(conn net.Conn) {
 				agent = "NoNameMiner" + strconv.FormatInt(rand.Int63(), 10)
 			}
 
+			// The password field selects the payout transport rather than authenticating;
+			// there are no accounts here. See db.setTransport.
+			ss.db.setTransport(login, pass)
+
 			switch ss.db.verifyMiner(login, pass) {
 			case wrongPassword:
 				log.Warning(login, " has failed to login")
