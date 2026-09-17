@@ -28,7 +28,7 @@ func main() {
 
 	go initAPIServer(db, conf)
 	go initStratumServer(db, conf)
-	go initPayer(db, conf)
+	go initPayouts(db, conf)
 	go initUnlocker(db, conf)
 	for {
 		select {}

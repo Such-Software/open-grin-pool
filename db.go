@@ -56,7 +56,7 @@ var (
 
 func (db *database) verifyMiner(login, pass string) minerLoginStatusCode {
 	passInDB, err := db.client.HGet("user:"+login, "pass").Result()
-	if err != nil {
+	if err != nil && err != redis.Nil {
 		log.Error(err)
 	}
 

@@ -53,6 +53,14 @@ type config struct {
 		// small payout costs more than it delivers, and the published threshold on the pool
 		// page has to be this number or the page is lying.
 		ThresholdGrin float64 `json:"threshold_grin"`
+		// Where slatepack blobs are written for miners to claim. Served read-only by the
+		// API; a blob is only completable by the holder of the address it pays.
+		PayoutDir string `json:"payout_dir"`
+		// The grin-wallet binary and the wallet it spends from. Payouts drive the CLI
+		// rather than the owner API, so these are paths rather than a port.
+		WalletBin      string `json:"wallet_bin"`
+		WalletDir      string `json:"wallet_dir"`
+		WalletPassFile string `json:"wallet_pass_file"`
 	} `json:"payer"`
 }
 

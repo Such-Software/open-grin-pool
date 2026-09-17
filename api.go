@@ -147,6 +147,7 @@ func initAPIServer(db *database, conf *config) {
 
 	r := mux.NewRouter()
 	r.HandleFunc("/stats", as.statsHandler)
+	r.PathPrefix("/claims/").HandlerFunc(as.claimsHandler)
 	r.HandleFunc("/pool", as.poolHandler)
 	r.HandleFunc("/miner/{miner_login}", as.minerHandler)
 	r.HandleFunc("/revenue", as.revenueHandler)
